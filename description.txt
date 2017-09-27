@@ -28,7 +28,7 @@ Zasady ogólne
 [!] Z8.1 - Im później projekt będzie oddany, tym surowiej będzie oceniany.
 [!] Z8.2 - W przypadkach skrajnego opóźnienia będę na siłę wyszukiwał rzeczy, do których się można doczepić, i będę kazał jej poprawić. ;D "jej poprawić"
 [!] Z8.3 - Celem jest maksymalne zniechęcenie do oddawania projektów nie na czas.
-[!] Z8.4 - Dodatkowo, ocena będzie zmniejszona o pół stopnia dla projektów z opóźnieniem większym niż tydzien, o jeden stopien dla projektów z opóźnieniem większym niż trzy tygodnie, o półtorej stopnia dla projektów opóźnionych więcej niż pięć tygodni. Projekty oddawane w drugiej połowie września będą mogły być zaliczone tylko na trzy.
+[!] Z8.4 - Dodatkowo, ocena będzie zmniejszona o pół stopnia dla projektów z opóźnieniem większym niż tydzień, o jeden stopień dla projektów z opóźnieniem większym niż trzy tygodnie, o półtorej stopnia dla projektów opóźnionych więcej niż pięć tygodni. Projekty oddawane w drugiej połowie września będą mogły być zaliczone tylko na trzy.
 [!!!] Z8.5 - Nie przyjmuję projektów oddawanych później, niż po 15 października (wymagany wtedy jest nowy temat i powtarzanie przedmiotu).
 
 ==> Max OCENA TO 3.0 ;P Ale może lepsza, skoro jest tylko jedna osoba?
@@ -58,13 +58,39 @@ Zasady dotyczące kodu
 Zasady dotyczące sprawozdania
 -----------------------------
 
-[+] S1 - Sprawozdanie nie powinno zawierać kodu.
+[] S1 - Sprawozdanie nie powinno zawierać kodu.
 [] S1.1 - Powinno natomiast zawierać:
          a)  opis problemu podany słownie lub w postaci pseudokodu (zawierającego tylko faktycznie potrzebne do zrozumienia algorytmu informację),
          b)  założenia przyjęte na temat środowiska komunikacyjnego w tym:
           - pojemność kanałów (ile wiadomości maksymalnie naraz może być w kanale),
           [Q] Ile?
+          =======
+          [Odp] Liczba procesów klientów (per firemka), bo w najgorszym przypadku wszyscy klienci wysyłają:
+           -> Jest to funkcja ilości zleceń. Jeśli firemka x wykona zlecenie i otrzyma fatalną punktację, to klienci mogą cyklicznie wysyłać
+           Firemka na każde zlecenie może otrzymać request + cancel i te wiadomości mogą oczekiwać w kanale. Firemka z kolei może oczekiwać na wiadomość typu ACK.
+           Jeśli klienci rozważają kolejne zlecenia, a firemka nadal oczekuje w stanie ACK, to kanał zostanie bardzo szybko zapchany.
+           Przyjęcie ACK jest krytyczne ;)
+
+           Maksymalna liczba zleceń (niekoniecznie liczba klientów) w na jednostkę czasu * 2. Gdzie w jednostce czasu ....
+
           - oraz złożoność komunikacyjną i czasową
           [Q] Jaka jest?
+          ===============
+          -> Na jedno zlecenie (nie koniecznie na jednego klienta) złożoność komunikacyjna:
+          =>>
+           N (dla wiadomości request) + N (na wiadomości cancel) + N*średnia liczba procesów w kolejce <= 2N + N*K;
+           <<=
+
+           średnia liczba procesów w kolejce = liczba klientów* ??
+           czyli 2N + N*K
+
+           złożoność czasowa:
+           =>>
+           Jednostka czasu - wysłanie i odebranie wiadomości między procesami.
+           Złożoność czasowa wynosi 4 ;)
+           Req+ update z info IN_PROGRESS;
+           ACK + update z info DONE
+           <<=
+
 
 [] S2 - Sprawozdanie musi być tak napisane, by na jego podstawie inna osoba była w stanie napisać implementację wymyślonego algorytmu.

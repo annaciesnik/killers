@@ -23,8 +23,8 @@ typedef enum State
 /* Reputation of companies (one entry per each company). */
 float* reputations;
 
-/* The queues[N] table contain exactly one entry per each company.
- * Each entry represent the current status of the assigned place in a company's queue.
+/* The queues[N] table contains exactly one entry per each company.
+ * Each entry represents the current status of the assigned place in a company's queue.
  * A nonnegative value represent the assigned place in a queue.
  * For other negative values see Q_CANCELLED, Q_NO_UPDATE_RECEIVED,  */
 int* queues;

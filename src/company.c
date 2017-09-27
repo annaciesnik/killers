@@ -208,7 +208,7 @@ void NewJob(int killer)
 
 /* Try to find a free killer.
  * Returns:
- * - '-1' when not found;
+ * - <NO_FREE_KILLER> when not found;
  * - Otherwise, id of the found killer.
  */
 

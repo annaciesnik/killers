@@ -45,13 +45,13 @@ Suma wszystkich procesów P jest zdefiniowana następująco:
 *K4*: Po wykonaniu kroku *K3*, proces klienta powinien oczekiwać na przychodzące wiadomości typu *TAG_UPDATE*.
 
 *K5*: W czasie oczekiwania na wiadomości typu *TAG_UPDATE* klient powinien również aktualizować informację na temat wystawionych recenzji.
-  *Notes 1*: Nowe recenzje razem z aktualnym miejscem w kolejce mogą wpłynąć na zmianę preferencji klienta i rezygnację z kolejki u innych firm.
+  *Notes 1*: Nowe recenzje razem z aktualnym miejscem w kolejce mogą wpłynąć na zmianę preferencji klienta i rezygnację z kolejki u innych firm. W przypadku rezygnacji z oferty (miejsca w kolejce), klient powinien wysłać wiadomość typu *TAG_CANCEL* i oznaczyć odpowiednie miejsce w tablicy *queues* jako *Q_CANCELLED*.
 
 *K5*: Po odebraniu wiadomości typu *TAG_UPDATE* z wartością nieujemną, klient powinien zapisać wyznaczone miejsce w kolejce n-tej firmy w tablicy "queues" na n-tej pozycji.
   *Notes 1*: Wyznaczone miejsce w kolejce n-tej firmy jest przesłane w wiadomości typu *TAG_UPDATE* jako wartość nieujemna. Wartości ujemne są zarezerwowane na inne komunikaty specjalnego przeznaczenia (np. *Q_IN_PROGRESS*, *Q_DONE* itd.);
 
 *K6* Przejście klienta ze stanu *QUEUE* do następnego *INPROGRESS* powinno nastąpić po odebrania pierwszej wiadomości typu *TAG_UPDATE* ze statusem *Q_IN_PROGRESS*;
-  *K6.1* W odpowiedzi na pierwszy komunikat *Q_IN_PROGRESS*, klient powinien wysłać wiadomość typu *ACK_OK* do tej firmy a do pozostałych *ACK_REJECT*.
+  *K6.1* W odpowiedzi na pierwszy komunikat *Q_IN_PROGRESS*, klient powinien wysłać wiadomość typu *ACK_OK* do tej firmy, a do pozostałych *ACK_REJECT*.
   *K6.2* Niezależnie od otrzymanych wiadomości, klient powinien zrezygnować z miejsc w kolejkach pozostałych firm poprzez wysłanie wiadomości typu *TAG_CANCEL* do każdej z nich i oznaczeniu odpowiednich miejsc w tablicy *queues* jako *Q_CANCELLED*.
 
 *K7* Klient powinien oczekiwać na pomyślne wykonanie zlecenia (w stanie *INPROGRESS* na wiadomość typu *TAG_UPDATE* ze statusem *Q_DONE*).
@@ -70,8 +70,8 @@ Suma wszystkich procesów P jest zdefiniowana następująco:
 
 ### Deskryptor stanu klienta (tzn. stanu zlecenia danego klienta)
 
---->
-/* Values of customer's state */
+#### Values of customer's state
+-->
 typedef enum State
 {
     WAITING,       /* A customer has no new task/job yet for a killer. */
@@ -82,90 +82,139 @@ typedef enum State
 } State;
 <--
 
-
+#### Assigned places in queues (one entry per each company).
+-->
 int queues[N]
-(??)
+<--
 
+The queues[N] table contains exactly one entry per each company.
+Each entry represents the current status of the assigned place in a company's queue.
+A nonnegative value represents the assigned place in a queue.
+For other negative values see Q_CANCELLED, Q_NO_UPDATE_RECEIVED and others.
 
-### Funkcje
-
-function onUpdate(MessageUpdate)
-    if (msg.status == IN_PROGRESS):
-        if (state != IN_PROGRESS):
-            state = IN_PROGRESS
-            wysłanie ACK(ACK_OK) do N_i
-            wysłanie CANCEL do pozostałych firm
-        if (state == IN_PROGRESS)
-            Send(ACK(ACK_REJECT), N_i)
 
 
 
 ## Firma
+Do procesu firmy należy główny wątek menadżera oraz wątek agenta.
 
-Do procesu firmy należy główny wątek oraz wątek agenta.
-Główny wątek oczekuje w pętli na przychodzące wiadomości.
-Wątek agenta oczekuje na wykonanie zlecenia przez jednego z zabójców i sygnalizuje
-to poprzez wysłanie wiadomości KILLER_READY, która jest obsługiwana przez główny wątek.
+*N1* Główny wątek powinien oczekiwać w pętli na przychodzące wiadomości.
+
+*N2* Wątek agenta powinien oczekiwać na wykonanie zlecenia przez któregokolwiek z zabójców danej firmy.
+Notes: Każda firma ma przypisaną listę Z zabójców.
+
+*N3* Wątek agenta powinien wysłać wiadomość *TAG_KILLER_READY* do głównego wątku firmy kiedy którykolwiek zabójca zakończył swoje zadanie.
+
+*N4* Menadżer powinien dodać klienta do kolejki jeśli otrzymał wiadomość typu *TAG_REQUEST* od klienta.
+  *N4.1* Menadżer powinien przydzielić zabójcę od razu jeśli kolejka była uprzednio pusta (tzn. jest aktualnie jeden klient oczekujący).
+
+*N5* Menadżer powinien anulować rezerwację klienta, kiedy otrzymał wiadomość typu *TAG_CANCEL*.
+
+*N6* Menadżer powinien przydzielić kolejne zlecenie zabójcy z puli oczekujących, jeśli otrzymał wiadomość *TAG_KILLER_READY* od agenta.
+
+*N7* Przydzielanie zlecenia wyznaczonemu zabójcy:
+
+*N7.1* Jeśli aktualnie rozważany zabójca ma nadal przypisanego klienta (wartość w polu <client> jest nieujemna), menadżer powinien:
+ 1) Wysłać wiadmość typu: *TAG_UPDATE* ze statusem *Q_DONE*.
+ 2) Wyczyścić informację o poprzednim kliencie (ustawić ) <client> na *NO_CLIENT*).
+ 3) Zaktualizować status zabójcy (ustawić pole <status> na *K_READY*).
+
+ *N7.2* Jeśli jest jakiekolwiek oczekujące zlecenie w kolejce, menadżer powinien:
+  1) Wysłać wiadomość typu *TAG_UPDATE* ze statusem *Q_IN_PROGRESS* do pierwszego klienta z listy oczekujących.
+  2) Oczekiwać na wiadomość typu *TAG_ACK*.
+  *N7.3* Jeśli klient potwierdził chęć wykonania zlecenia (wiadomość typu *TAG_ACK* ze statusem *ACK_OK*), menadżer powinien przypisać tego klienta w polu <client>, ustawić przewidywany czas zakończenia zlecenia i ustawić <status> zabójcy na K_BUSY.
+
+  *N7.4* Jeśli klient odrzucił ofertę firmy (wiadomość typu *TAG_ACK* ze statusem *ACK_REJECT*), menadżer powinien pobrać kolejne zlecenie z kolejki do rozważenia (*N7.2*).
 
 
-### Deskryptor
+  *N8* Agent powinien sprawdzić jaki jest najkrótszy czas realizacji zlecenia dla zabójców ze zleceniem (<status> *K_BUSY*) i ustawić sobie czas oczekiwania.
 
-int Queue[K]
-struct Killer {
-    int client
-    int status
-    timer }
-struct Killer Killers[Z]
-mutex killersMutex
+  *N9* Agent powinien odpytać wszystkich zabójców z przydzielonym zleceniem i wysłać wiadomość do menadżera (TAG_KILLER_READY) z informacją który zabójca może podjąć się kolejnego zlecenia.
+
+
+
+### Deskryptor firmy (company)
+Kolejka *Queue* danej firmy może zawierać maksymalnie zlecenia od K klientów. Pozycja w tablicy powinna odpowiadać wyznaczonemu miejscu w kolejce. Natomiast q-ty element tablicy powinien zawierać ID procesu klienta. Aktualny rozmiar kolejki powinien być zapisany w zmiennej *queueLen*.
+-->
+/* The Queue[customers]
+ * Queue[queuePos] is a client's process number */
+int Queue[K];     
+
+/* Length of the current queue with customers */
+int queueLen;
+<--
+
+Lista zabójców jest zasobem współdzielonym pomiędzy głównym wątkiem w procesie firmy, a wątkiem agenta.
+Dostęp do listy jest chroniony poprzez mutex *killersMute*.
+Liczba zabójców *Z* ustalana przez użytkownika jest jednocześnie rozmiarem tablicy *Killers*. Jest ona jednakowa dla wszystkich firm.
+-->
+/* The list of killers of the current company. */
+struct Killer Killers[Z];
+
+/* Mutex to protect the list of 'Killers' */
+pthread_mutex_t killersMutex;   
+<--
+
+Deskryptor zabójcy zawiera następujące informacje:
+- *client* - Aktualnie obsługiwany klient (lub *NO_CLIENT*, jeśli brak).
+- *status* - Aktualny status zabójcy (m.in. *K_READY* lub *K_BUSY*).
+-
+
+
+-->
+/* Descriptor of a killer */
+typedef struct Killer {
+    int client;                /* The current customer, which is served */
+    int status;                /* Status of the killer */
+    Timespec timer;            /* Time related with the current task ?? (time to the end)?? */
+} Killer;
+<--
+
+Rozróżniamy następujące statusy zabójcy:
+- *K_READY* - Oczekiwanie na zlecenie.
+- *K_BUSY* - Zabójca w trakcie zlecenia.
+- *K_NOTIFICATION_SENT* - Zabójca wykonał zadanie i wysłał informację zwrotną. Oczekuje na dalszą decyzję ze strony głównego wątku firmy - manager'a.
+
+Bezpośrednia kominikacją pomiędzy głównym wątkiem menadżera, a wątkiem agenta odbywa się za pomocą zmiennej warunkowej *wakeUpAgent*. Agent oczekuje na zakończenie zlecenia przez któregokolwiek ze swoich podopiecznych.
+Jeśli główny wątek przydzieli kolejne zlecenie wolnemu zabójcy (lub takiemu, który akurat wrócił z misji), wówczas wysyła sygnał do agenta. Agent wówczas budzi się na chwilę, sprawdza jaki jest najkrótszy deklarowany czas realizacji zlecenia.
+-->
 conditional wakeUpAgent
+<--
 
-## Typy wiadomości
+# Założenia
+## Pojemność kanałów
+Maksymanie w kanale naraz może być ... wiadomości..
+##
+- pojemność kanałów (ile wiadomości maksymalnie naraz może być w kanale),
+[Q] Ile?
+=======
+[Odp] Liczba procesów klientów (per firemka), bo w najgorszym przypadku wszyscy klienci wysyłają:
+ -> Jest to funkcja ilości zleceń. Jeśli firemka x wykona zlecenie i otrzyma fatalną punktację, to klienci mogą cyklicznie wysyłać
+ Firemka na każde zlecenie może otrzymać request + cancel i te wiadomości mogą oczekiwać w kanale. Firemka z kolei może oczekiwać na wiadomość typu ACK.
+ Jeśli klienci rozważają kolejne zlecenia, a firemka nadal oczekuje w stanie ACK, to kanał zostanie bardzo szybko zapchany.
+ Przyjęcie ACK jest krytyczne ;)
 
-REQUEST
-Przesyłane od procesu klienta K_i do firmy N_i.
-Dane: brak
-Wymagania: brak poprzedniej wiadomości REQUEST
-           lub po ostatniej REQUEST wysłano wiadomość CANCEL
-Po odebraniu: dodanie K_i do kolejki
-    XXX jeśli kolejka jest pusta i jest dostępny zabójca wysłanie UPDATE(IN_PROGRESS)
+ Maksymalna liczba zleceń (niekoniecznie liczba klientów) w na jednostkę czasu * 2. Gdzie w jednostce czasu ....
 
-CANCEL
-K_i -> N_i
-Dane: brak
-Wymagania: K_i wysłał do N_i REQUEST, ale nie wysłał CANCEL ani ACK
-Po odebraniu: usunięcie K_i z kolejki
+- oraz złożoność komunikacyjną i czasową
+[Q] Jaka jest?
+===============
+-> Na jedno zlecenie (nie koniecznie na jednego klienta) złożoność komunikacyjna:
+=>>
+ N (dla wiadomości request) + N (na wiadomości cancel) + N*średnia liczba procesów w kolejce <= 2N + N*K;
+ <<=
 
-UPDATE
-N_i -> K_i
-Dane:
-    - status: dostępny, w kolejce, rozpoczęnie obsługi zlecenia, zlecenie wykonane
-    - pozycja w kolejce
-Wymagania: K_i jest w kolejce firmy N_i lub zlecenie od K_i jest wykonywane
-    przez zabójcę należącego do N_i
-    zmiana miejsca w kolejce
-    "rozpoczęcie" wykonywania zlecenia - możliwość rozpoczęcia
-    zakończenie wykonywania zlecenia
-Po odebraniu:
-    jeśli status wiadomości == rozpoczęcie obsługi:
-        jeśli klient czeka:
-            zmiana stanu klienta
-            wysłanie ACK(ACK_OK) do N_i
-            wysłanie CANCEL do pozostałych firm
-        jeśli K_i odebrał już UPDATE ze stanem IN_PROGRESS:
-            wysłanie ACK(ACK_REJECT) do N_i
+ średnia liczba procesów w kolejce = liczba klientów* ??
+ czyli 2N + N*K
 
-ACK
-K_i -> N_i
-Dane: status (akceptacja / odmowa)
-Wymagania: odebranie wiadomości UPDATA N_i -> K_i ze stanem IN_PROGRESS
-Po odebraniu: rozpoczęcie obsługi zlecenia
+ złożoność czasowa:
+ =>>
+ Jednostka czasu - wysłanie i odebranie wiadomości między procesami.
+ Złożoność czasowa wynosi 4 ;)
+ Req+ update z info IN_PROGRESS;
+ ACK + update z info DONE
+ <<=
 
-KILLER READY
-N_i -> N_i
-Dane: numer zabójcy
-Wymagania: wykonanie zadania przez zabójcę
-Po odebraniu:
-    jeśli kolejka nie jest pusta ...
 
 # Uruchomienie programu
 
